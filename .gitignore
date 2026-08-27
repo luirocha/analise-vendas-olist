@@ -1,0 +1,7 @@
+# Dados brutos — não commitar (arquivos muito grandes)
+data/*.csv
+data/*.txt
+
+# Sistema
+.DS_Store
+Thumbs.db
