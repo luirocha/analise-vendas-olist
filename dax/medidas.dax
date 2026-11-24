@@ -1,0 +1,210 @@
+// ============================================================================
+// MEDIDAS DO DASHBOARD OLIST
+// Todas ficam na tabela _Medidas (Inserir dados > tabela vazia chamada _Medidas).
+// Cada bloco indica a pasta de exibição e o formato sugerido.
+// Modelo assumido: Fato_Pedidos <-> Fato_Itens com filtro nos DOIS sentidos,
+// então filtros de produto e vendedor chegam em Fato_Pedidos.
+// ============================================================================
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 1 Vendas
+// ---------------------------------------------------------------------------
+
+// Formato: R$ #,0.00
+Receita = SUM(Fato_Itens[preco])
+
+// Formato: R$ #,0.00
+Frete Total = SUM(Fato_Itens[frete])
+
+// Formato: R$ #,0.00
+Receita com Frete = [Receita] + [Frete Total]
+
+// Formato: #,0
+Pedidos = COUNTROWS(Fato_Pedidos)
+
+// Formato: #,0
+Itens Vendidos = COUNTROWS(Fato_Itens)
+
+// Formato: R$ #,0.00
+Ticket Médio = DIVIDE([Receita], [Pedidos])
+
+// Formato: 0.00
+Itens por Pedido = DIVIDE([Itens Vendidos], [Pedidos])
+
+// Formato: R$ #,0.00
+Preço Médio por Item = DIVIDE([Receita], [Itens Vendidos])
+
+// Formato: 0.0%
+Frete % da Receita = DIVIDE([Frete Total], [Receita])
+
+// Formato: 0.0%
+% da Receita = DIVIDE([Receita], CALCULATE([Receita], ALLSELECTED()))
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 2 Tempo
+// Dependem de Dim_Calendario marcada como tabela de datas.
+// ---------------------------------------------------------------------------
+
+// Formato: R$ #,0.00
+Receita Ano Anterior = CALCULATE([Receita], SAMEPERIODLASTYEAR(Dim_Calendario[Data]))
+
+// Formato: +0.0%;-0.0%;0.0%
+Receita Var. Anual % =
+DIVIDE([Receita] - [Receita Ano Anterior], [Receita Ano Anterior])
+
+// Formato: R$ #,0.00
+Receita Mês Anterior = CALCULATE([Receita], DATEADD(Dim_Calendario[Data], -1, MONTH))
+
+// Formato: +0.0%;-0.0%;0.0%
+Receita Var. Mensal % =
+DIVIDE([Receita] - [Receita Mês Anterior], [Receita Mês Anterior])
+
+// Formato: R$ #,0.00
+Receita Acumulada no Ano = TOTALYTD([Receita], Dim_Calendario[Data])
+
+// Média da receita mensal dos últimos 3 meses (incluindo o atual), só dentro do período de análise.
+// Nos primeiros meses do período a janela é parcial (menos de 3 meses disponíveis).
+// Formato: R$ #,0.00
+Receita Média Móvel 3M =
+VAR UltimaData = MAX(Dim_Calendario[Data])
+RETURN
+    CALCULATE(
+        AVERAGEX(VALUES(Dim_Calendario[Mês/Ano Ordem]), [Receita]),
+        ALL(Dim_Calendario),
+        Dim_Calendario[No Período de Análise] = "Sim",
+        DATESINPERIOD(Dim_Calendario[Data], UltimaData, -3, MONTH)
+    )
+
+// Texto para o subtítulo do cabeçalho. Usa as datas de compra existentes no filtro atual.
+Período de Dados =
+VAR Inicio = MIN(Fato_Pedidos[data_compra])
+VAR Fim = MAX(Fato_Pedidos[data_compra])
+RETURN
+    IF(
+        ISBLANK(Inicio),
+        "Sem dados no filtro atual",
+        "Compras de " & FORMAT(Inicio, "dd/MM/yyyy") & " a " & FORMAT(Fim, "dd/MM/yyyy")
+    )
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 3 Entrega
+// Observação: em DAX, BLANK = 0 é verdadeiro. Por isso nenhuma medida abaixo
+// compara a coluna entregue_no_prazo com 0; os atrasos usam dias_diferenca_prazo > 0.
+// ---------------------------------------------------------------------------
+
+// Formato: 0.0
+Tempo Médio de Entrega (dias) = AVERAGE(Fato_Pedidos[dias_entrega])
+
+// Formato: 0.0
+Prazo Médio Prometido (dias) = AVERAGE(Fato_Pedidos[dias_prazo_estimado])
+
+// Formato: 0.0%
+% Entregas no Prazo =
+DIVIDE(SUM(Fato_Pedidos[entregue_no_prazo]), COUNT(Fato_Pedidos[entregue_no_prazo]))
+
+// Formato: #,0
+Pedidos Atrasados =
+CALCULATE(COUNTROWS(Fato_Pedidos), Fato_Pedidos[dias_diferenca_prazo] > 0)
+
+// Formato: 0.0%
+% Entregas Atrasadas =
+DIVIDE([Pedidos Atrasados], COUNT(Fato_Pedidos[dias_diferenca_prazo]))
+
+// Formato: 0.0
+Atraso Médio dos Atrasados (dias) =
+CALCULATE(AVERAGE(Fato_Pedidos[dias_diferenca_prazo]), Fato_Pedidos[dias_diferenca_prazo] > 0)
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 4 Satisfação
+// Nota nula (pedido sem avaliação) é ignorada por AVERAGE e COUNT.
+// Os filtros abaixo usam >= 1 para não capturar nulos (BLANK <= 2 é verdadeiro em DAX).
+// ---------------------------------------------------------------------------
+
+// Formato: 0.00
+Nota Média = AVERAGE(Fato_Pedidos[Nota])
+
+// Formato: #,0
+Pedidos Avaliados = COUNT(Fato_Pedidos[Nota])
+
+// Formato: 0.0%
+% Notas Baixas (1 e 2) =
+DIVIDE(
+    CALCULATE(COUNTROWS(Fato_Pedidos), Fato_Pedidos[Nota] >= 1 && Fato_Pedidos[Nota] <= 2),
+    [Pedidos Avaliados]
+)
+
+// Formato: 0.0%
+% Notas 5 =
+DIVIDE(CALCULATE(COUNTROWS(Fato_Pedidos), Fato_Pedidos[Nota] = 5), [Pedidos Avaliados])
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 5 Clientes e Pagamentos
+// ---------------------------------------------------------------------------
+
+// Pessoas distintas (customer_unique_id), não customer_id.
+// Formato: #,0
+Clientes Únicos = DISTINCTCOUNT(Fato_Pedidos[customer_unique_id])
+
+// Clientes com mais de um pedido entregue no contexto de filtro atual.
+// Formato: #,0
+Clientes Recorrentes =
+COUNTROWS(
+    FILTER(
+        VALUES(Fato_Pedidos[customer_unique_id]),
+        CALCULATE(COUNTROWS(Fato_Pedidos)) > 1
+    )
+)
+
+// Formato: 0.0%
+% Clientes Recorrentes = DIVIDE([Clientes Recorrentes], [Clientes Únicos])
+
+// Soma dos pagamentos registrados (inclui frete e pode diferir de Receita com Frete por vouchers e arredondamentos).
+// Formato: R$ #,0.00
+Valor Pago Total = SUM(Fato_Pedidos[valor_pagamento_total])
+
+// Formato: 0.0
+Parcelas Médias = AVERAGE(Fato_Pedidos[parcelas_max])
+
+
+// ---------------------------------------------------------------------------
+// PASTA: 6 Produtos e Vendedores
+// ---------------------------------------------------------------------------
+
+// Categorias com pelo menos um item vendido no filtro atual.
+// Formato: #,0
+Categorias Ativas =
+COUNTROWS(FILTER(VALUES(Dim_Produto[Categoria]), [Itens Vendidos] > 0))
+
+// Formato: #,0
+Vendedores Ativos = DISTINCTCOUNT(Fato_Itens[seller_id])
+
+// Formato: R$ #,0.00
+Receita por Vendedor = DIVIDE([Receita], [Vendedores Ativos])
+
+// Formato: R$ #,0.00
+Receita Top 10 Vendedores =
+VAR Top10 = TOPN(10, ALLSELECTED(Dim_Vendedor[seller_id]), [Receita], DESC)
+RETURN
+    CALCULATE([Receita], Top10)
+
+// Formato: 0.0%
+Concentração Top 10 Vendedores % = DIVIDE([Receita Top 10 Vendedores], [Receita])
+
+// Curva de Pareto por categoria. ALL na coluna remove o filtro Top N do visual,
+// então o acumulado é calculado sobre todas as categorias.
+// Formato: 0.0%
+Receita Acumulada % (Pareto) =
+VAR ReceitaAtual = [Receita]
+VAR Todas = ALL(Dim_Produto[Categoria])
+VAR AteAqui = FILTER(Todas, [Receita] >= ReceitaAtual)
+RETURN
+    DIVIDE(SUMX(AteAqui, [Receita]), SUMX(Todas, [Receita]))
+
+// Posição no ranking de receita. Formato: 0
+Ranking Categoria =
+RANKX(ALLSELECTED(Dim_Produto[Categoria]), [Receita], , DESC, Dense)
