@@ -99,3 +99,20 @@ WHERE o.order_status = 'delivered';
 
 SELECT * FROM olist.vw_fato_itens
 ORDER BY data_pedido, order_id, item;
+
+--Validação dos dados
+-- 1) Integridade do grão
+SELECT
+    COUNT(*)                          AS linhas,
+    COUNT(DISTINCT (order_id, item))  AS chaves_unicas,
+    SUM(flag_primeiro_item)           AS pedidos,
+    COUNT(DISTINCT order_id)          AS pedidos_distintos
+FROM olist.vw_fato_itens;
+
+-- 2) Faturamento bate com a origem (os dois valores devem ser iguais)
+SELECT
+    (SELECT ROUND(SUM(preco_produto), 2) FROM olist.vw_fato_itens) AS na_view,
+    (SELECT ROUND(SUM(oi.price::numeric), 2)
+       FROM olist.olist_order_items oi
+       JOIN olist.olist_orders o ON o.order_id = oi.order_id
+      WHERE o.order_status = 'delivered')                          AS na_origem;
