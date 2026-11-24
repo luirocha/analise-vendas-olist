@@ -40,3 +40,18 @@ dados importados via comando COPY nativo do PostgreSQL:
 olist_customers · olist_geolocation · olist_order_items
 olist_order_payments · olist_order_reviews · olist_orders
 olist_products · olist_sellers · product_category_name_translation
+
+## Arquivos esperados nesta pasta
+
+Estes cinco arquivos são gerados pelas views do schema `olist` (scripts em `sql/`) e lidos pelo Power Query:
+
+| Arquivo            | View de origem              | Grão                        |
+| ------------------ | --------------------------- | --------------------------- |
+| `Dim_Cliente.csv`  | `olist.vw_pbi_dim_cliente`  | 1 linha por `customer_id`   |
+| `Dim_Vendedor.csv` | `olist.vw_pbi_dim_vendedor` | 1 linha por `seller_id`     |
+| `Dim_Produto.csv`  | `olist.vw_pbi_dim_produto`  | 1 linha por `product_id`    |
+| `Fato_Pedidos.csv` | `olist.vw_pbi_fato_pedidos` | 1 linha por pedido entregue |
+| `Fato_Itens.csv`   | `olist.vw_pbi_fato_itens`   | 1 linha por item entregue   |
+
+O nome do arquivo precisa ser exatamente este (inclusive maiúsculas), porque o Power Query monta o caminho com `pPastaCSV & "\Nome.csv"`.
+Clique com o botão direito na view > Exportar dados > CSV.
